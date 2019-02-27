@@ -30,12 +30,13 @@ from qgis.PyQt.Qt import QObject
 from qgis.core import QgsMapLayer, Qgis, QgsVectorLayer, QgsCoordinateReferenceSystem, QgsCoordinateTransform, QgsFeatureRequest, QgsWkbTypes, QgsProject
 from qgis.gui import QgsMessageBar
 
-from .inspectFeatures_ui import Ui_Form
-# FORM_CLASS, _ = uic.loadUiType(os.path.join(
-#     os.path.dirname(__file__), 'inspectFeatures.ui'))
+# from .inspectFeatures_ui import Ui_Form
+FORM_CLASS, _ = uic.loadUiType(os.path.join(
+    os.path.dirname(__file__), 'inspectFeatures.ui'))
 
-class InspectFeatures(QWidget,Ui_Form):
+class InspectFeatures(QWidget, FORM_CLASS):
     idxChanged = pyqtSignal(int)
+    featureCountChanged = pyqtSignal()
     def __init__(self, iface, parent = None):
         """
         Constructor
@@ -45,13 +46,13 @@ class InspectFeatures(QWidget,Ui_Form):
         self.parent = parent
         self.splitter.hide()
         self.iface = iface
-        self.iface.currentLayerChanged.connect(self.enableScale)
+        self.mMapLayerComboBox.layerChanged.connect(self.setToolbarState)
+        self.mMapLayerComboBox.layerChanged.connect(self.enableTool)
         self.mMapLayerComboBox.layerChanged.connect(self.enableScale)
         self.mMapLayerComboBox.layerChanged.connect(self.mFieldExpressionWidget.setLayer)
         if not self.iface.activeLayer():
             self.enableTool(False)
-        self.iface.currentLayerChanged.connect(self.enableTool)
-        self.mMapLayerComboBox.layerChanged.connect(self.enableTool)
+        
         self.mScaleWidget.setScaleString('1:40000')
         self.mScaleWidget.setEnabled(False)
         self.enableScale()
@@ -72,6 +73,23 @@ class InspectFeatures(QWidget,Ui_Form):
         self.nextButtonAction = self.add_action(icon_path, text, self.nextInspectButton.click, parent = self.parent)
         self.iface.registerMainWindowAction(self.nextButtonAction, '')
     
+    def checkFeatureCount(self, layer):
+        """
+        Method to handle layer modified signal and verify whether feature count was changed.
+        :param layer: (QgsVectorLayer) layer has had modifications applied to it.
+        :return: (bool) whether feature has changed.
+        """
+        res = layer.featureCount() != self.featureCount
+        if res:
+            self.featureCountChanged.emit()
+            self.featureCount = layer.featureCount
+        return res
+    
+    def setToolbarState(self, currentLayer):
+        self.enableTool(currentLayer)
+
+
+    
     def add_action(self, icon_path, text, callback, parent=None):
         icon = QIcon(icon_path)
         action = QAction(icon, text, parent)
@@ -83,8 +101,7 @@ class InspectFeatures(QWidget,Ui_Form):
     def getIterateLayer(self):
 	    return self.mMapLayerComboBox.currentLayer()
 
-    def enableTool(self, enabled = True):
-        from qgis.core import QgsVectorLayer
+    def enableTool(self, enabled=True):
         if enabled == None or not isinstance(enabled, QgsVectorLayer):
             allowed = False
         else:
@@ -331,18 +348,6 @@ class InspectFeatures(QWidget,Ui_Form):
         #     self.zoomFeature(zoom)
         # else:
         self.zoomFeature(zoom, idDict = {'id':id, 'lyr':currentLayer})        
-
-    @pyqtSlot(bool)
-    def on_onlySelectedRadioButton_toggled(self, toggled):
-        currentLayer = self.getIterateLayer()
-        if toggled:
-            featIdList = currentLayer.selectedFeatureIds()
-            self.setValues(featIdList, currentLayer)
-            self.idSpinBox.setEnabled(False)
-        else:
-            featIdList = currentLayer.allFeatureIds()
-            self.setValues(featIdList, currentLayer)
-            self.idSpinBox.setEnabled(True)
     
     def unload(self):
         self.iface.unregisterMainWindowAction(self.activateToolAction)
